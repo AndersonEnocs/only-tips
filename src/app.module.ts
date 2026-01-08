@@ -5,6 +5,7 @@ import { DefaultSettingsModule } from './default-settings/default-settings.modul
 import { IdeasModule } from './ideas/ideas.module';
 import { PaymentsModule } from './payments/payments.module';
 import { AdminModule } from './admin/admin.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AdminModule } from './admin/admin.module';
     IdeasModule,
     PaymentsModule,
     AdminModule,
+    AuthModule,
   ],
   controllers: [],
   providers: [],

@@ -1,11 +1,13 @@
-import { Controller, Get, Put, Body, Param, Query, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, Query, UsePipes, ValidationPipe, UseGuards } from '@nestjs/common';
 import { AdminService } from '../services/admin.service';
 import { AdminDecisionDto } from '../../ideas/dtos/admin-decision.dto';
 import { UpdateFundDto } from '../../ideas/dtos/update-fund.dto';
 import { ApiResponseDto } from '../../shared/dtos/api-response.dto';
 import { IdeaMapper } from '../../ideas/utilities/idea.mapper';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 
 @Controller('admin')
+@UseGuards(JwtAuthGuard)
 export class AdminController {
     constructor(private readonly adminService: AdminService) {}
 
