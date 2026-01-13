@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsString, IsBoolean, IsOptional, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsBoolean, IsOptional, MaxLength, IsEnum } from 'class-validator';
+import { PaymentMethod } from '../../payments/schemas/payment.schema';
 
 export class SubmitIdeaDto {
     @IsString()
@@ -18,4 +19,8 @@ export class SubmitIdeaDto {
     @IsBoolean()
     @IsOptional()
     isPublic?: boolean;
+
+    @IsEnum(PaymentMethod)
+    @IsNotEmpty()
+    paymentMethod: PaymentMethod;
 }

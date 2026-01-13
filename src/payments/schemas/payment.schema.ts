@@ -12,7 +12,8 @@ export enum PaymentStatus {
 
 export enum PaymentMethod {
     STRIPE = 'STRIPE',
-    // Add other methods if needed
+    PAYPAL = 'PAYPAL',
+    APPLE_PAY = 'APPLE_PAY'
 }
 
 @Schema({ collection: 'payments', timestamps: true })
@@ -33,6 +34,12 @@ export class Payment {
 
     @Prop({ type: String })
     paymentIntentId?: string;
+
+    @Prop({ type: String })
+    paypalOrderId?: string;
+
+    @Prop({ type: String })
+    paypalTransactionId?: string;
 
     @Prop({ enum: PaymentStatus, default: PaymentStatus.PENDING })
     status: PaymentStatus;

@@ -20,7 +20,7 @@ export class IdeasController {
         let ideaSchema = IdeaMapper.dtoToSchema(dto);
         const savedIdea = await this.ideasService.create(ideaSchema);
 
-        const { checkoutUrl } = await this.paymentsService.createCheckoutSession(savedIdea._id!.toString());
+        const { checkoutUrl } = await this.paymentsService.createCheckoutSession(savedIdea._id!.toString(), dto.paymentMethod);
 
         return {
             statusCode: 1000,

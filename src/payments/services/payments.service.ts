@@ -9,6 +9,8 @@ import { Payment, PaymentDocument, PaymentStatus, PaymentMethod } from '../schem
 @Injectable()
 export class PaymentsService {
     private stripe: Stripe | null = null;
+    private paypalAccessToken: string | null = null;
+    private paypalTokenExpiry: Date | null = null;
 
     constructor(
         @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
@@ -27,7 +29,91 @@ export class PaymentsService {
         return this.stripe;
     }
 
-    async createCheckoutSession(ideaId: string): Promise<{ checkoutUrl: string }> {
+    private async getPayPalAccessToken(): Promise<string> {
+        // Check if we have a valid token
+        if (this.paypalAccessToken && this.paypalTokenExpiry && this.paypalTokenExpiry > new Date()) {
+            return this.paypalAccessToken;
+        }
+
+        if (!constantsAppSettings.paypalClientId || !constantsAppSettings.paypalClientSecret) {
+            throw new Error('PayPal client credentials are not configured in app settings');
+        }
+
+        const auth = Buffer.from(`${constantsAppSettings.paypalClientId}:${constantsAppSettings.paypalClientSecret}`).toString('base64');
+
+        const baseUrl = constantsAppSettings.paypalEnvironment === 'live'
+            ? 'https://api.paypal.com'
+            : 'https://api.sandbox.paypal.com';
+
+        const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'grant_type=client_credentials',
+        });
+
+        if (!response.ok) {
+            throw new Error(`PayPal auth failed: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        this.paypalAccessToken = data.access_token;
+        this.paypalTokenExpiry = new Date(Date.now() + (data.expires_in * 1000));
+
+        return this.paypalAccessToken!;
+    }
+
+    private async createPayPalOrder(ideaId: string, amount: number): Promise<{ approvalUrl: string; orderId: string }> {
+        const accessToken = await this.getPayPalAccessToken();
+
+        const baseUrl = constantsAppSettings.paypalEnvironment === 'live'
+            ? 'https://api.paypal.com'
+            : 'https://api.sandbox.paypal.com';
+
+        const response = await fetch(`${baseUrl}/v2/checkout/orders`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                intent: 'CAPTURE',
+                purchase_units: [{
+                    reference_id: ideaId,
+                    amount: {
+                        currency_code: 'USD',
+                        value: amount.toFixed(2),
+                    },
+                    description: `Idea submission fee for idea ${ideaId}`,
+                }],
+                application_context: {
+                    return_url: constantsAppSettings.paypalSuccessUrl,
+                    cancel_url: constantsAppSettings.paypalCancelUrl,
+                },
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`PayPal order creation failed: ${response.statusText}`);
+        }
+
+        const order = await response.json();
+
+        const approvalLink = order.links.find((link: any) => link.rel === 'approve');
+
+        if (!approvalLink) {
+            throw new Error('PayPal approval URL not found in response');
+        }
+
+        return {
+            approvalUrl: approvalLink.href,
+            orderId: order.id,
+        };
+    }
+
+    async createCheckoutSession(ideaId: string, paymentMethod: PaymentMethod): Promise<{ checkoutUrl: string }> {
         try {
             const idea = await this.ideasService.findById(ideaId);
 
@@ -35,35 +121,82 @@ export class PaymentsService {
                 ideaId: new Types.ObjectId(ideaId),
                 amount: constantsAppSettings.submissionFee,
                 currency: 'usd',
-                paymentMethod: PaymentMethod.STRIPE,
+                paymentMethod,
                 status: PaymentStatus.PENDING,
                 invoiceNumber: await this.generateInvoiceNumber()
             });
 
             await payment.save();
 
-            const session = await this.getStripe().checkout.sessions.create({
-                payment_method_types: ['card'],
-                line_items: [{
-                    price_data: {
-                        currency: 'usd',
-                        product_data: {
-                            name: 'Idea Human Review Fee',
-                            description: `Review for: ${idea.title}`
-                        },
-                        unit_amount: Math.round(constantsAppSettings.submissionFee * 100),
-                    },
-                    quantity: 1,
-                }],
-                mode: 'payment',
-                success_url: constantsAppSettings.stripeSuccessUrl,
-                cancel_url: constantsAppSettings.stripeCancelUrl,
-                metadata: { ideaId: idea._id!.toString(), paymentId: payment._id!.toString() },
-            });
+            let checkoutUrl: string;
 
-            await this.ideasService.updateStripeSessionId(ideaId, session.id);
+            switch (paymentMethod) {
+                case PaymentMethod.STRIPE:
+                    const session = await this.getStripe().checkout.sessions.create({
+                        payment_method_types: ['card'] as Stripe.Checkout.SessionCreateParams.PaymentMethodType[],
+                        line_items: [{
+                            price_data: {
+                                currency: 'usd',
+                                product_data: {
+                                    name: 'Idea Human Review Fee',
+                                    description: `Review for: ${idea.title}`
+                                },
+                                unit_amount: Math.round(constantsAppSettings.submissionFee * 100),
+                            },
+                            quantity: 1,
+                        }],
+                        mode: 'payment',
+                        success_url: constantsAppSettings.stripeSuccessUrl,
+                        cancel_url: constantsAppSettings.stripeCancelUrl,
+                        metadata: { ideaId: idea._id!.toString(), paymentId: payment._id!.toString() },
+                    });
 
-            return { checkoutUrl: session.url! };
+                    await this.ideasService.updateStripeSessionId(ideaId, session.id);
+                    checkoutUrl = session.url!;
+                    break;
+
+                case PaymentMethod.PAYPAL:
+                    const paypalOrder = await this.createPayPalOrder(ideaId, constantsAppSettings.submissionFee);
+
+                    // Update payment record with PayPal order ID
+                    await this.paymentModel.findByIdAndUpdate(
+                        payment._id,
+                        { paypalOrderId: paypalOrder.orderId }
+                    );
+
+                    checkoutUrl = paypalOrder.approvalUrl;
+                    break;
+
+                case PaymentMethod.APPLE_PAY:
+                    // Apple Pay through Stripe (requires additional Stripe configuration)
+                    const applePaySession = await this.getStripe().checkout.sessions.create({
+                        payment_method_types: ['card'] as Stripe.Checkout.SessionCreateParams.PaymentMethodType[],
+                        line_items: [{
+                            price_data: {
+                                currency: 'usd',
+                                product_data: {
+                                    name: 'Idea Human Review Fee',
+                                    description: `Review for: ${idea.title}`
+                                },
+                                unit_amount: Math.round(constantsAppSettings.submissionFee * 100),
+                            },
+                            quantity: 1,
+                        }],
+                        mode: 'payment',
+                        success_url: constantsAppSettings.stripeSuccessUrl,
+                        cancel_url: constantsAppSettings.stripeCancelUrl,
+                        metadata: { ideaId: idea._id!.toString(), paymentId: payment._id!.toString() },
+                    });
+
+                    await this.ideasService.updateStripeSessionId(ideaId, applePaySession.id);
+                    checkoutUrl = applePaySession.url!;
+                    break;
+
+                default:
+                    throw new BadRequestException('Unsupported payment method');
+            }
+
+            return { checkoutUrl };
         } catch (error) {
             console.error(`Failed to create checkout session for idea ${ideaId}:`, error);
             throw new BadRequestException('Failed to create payment session');
@@ -88,6 +221,40 @@ export class PaymentsService {
         }
 
         return { received: true };
+    }
+
+    async handlePayPalWebhook(event: any) {
+        try {
+            if (event.event_type === 'PAYMENT.CAPTURE.COMPLETED') {
+                const orderId = event.resource.supplementary_data?.related_ids?.order_id;
+
+                if (orderId) {
+                    // Find payment by PayPal order ID
+                    const payment = await this.paymentModel.findOne({ paypalOrderId: orderId });
+
+                    if (payment) {
+                        const idea = await this.ideasService.confirmPayment(payment.ideaId.toString(), event.resource.id);
+
+                        // Update payment record to PAID
+                        await this.paymentModel.findByIdAndUpdate(
+                            payment._id,
+                            {
+                                $set: {
+                                    paypalTransactionId: event.resource.id,
+                                    status: PaymentStatus.PAID,
+                                    paidAt: new Date()
+                                }
+                            }
+                        );
+                    }
+                }
+            }
+
+            return { received: true };
+        } catch (error) {
+            console.error('PayPal webhook processing failed:', error);
+            throw new BadRequestException('PayPal webhook processing failed');
+        }
     }
 
     private async confirmPayment(ideaId: string, paymentIntentId: string, paymentId: string) {
