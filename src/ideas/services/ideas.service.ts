@@ -38,10 +38,17 @@ export class IdeasService {
         return this.updateStatus(id, { stripe_session_id: sessionId });
     }
 
-    async confirmPayment(id: string, paymentIntentId: string): Promise<Idea> {
-        return this.updateStatus(id, {
-            status: IdeaStatus.RECEIVED,
-            stripe_payment_intent: paymentIntentId
-        });
+    async confirmPayment(id: string, paymentIntentId: string, paymentMethod?: string): Promise<Idea> {
+        const updateData: Partial<Idea> = {
+            status: IdeaStatus.RECEIVED
+        };
+
+        if (paymentMethod === 'PAYPAL' || paymentIntentId.startsWith('PAYPAL_')) {
+            updateData.stripe_payment_intent = paymentIntentId;
+        } else {
+            updateData.stripe_payment_intent = paymentIntentId;
+        }
+
+        return this.updateStatus(id, updateData);
     }
 }

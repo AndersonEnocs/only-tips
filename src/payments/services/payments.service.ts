@@ -217,7 +217,7 @@ export class PaymentsService {
 
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object as Stripe.Checkout.Session;
-            await this.confirmPayment(session.metadata!.ideaId, session.payment_intent as string, session.metadata!.paymentId);
+            await this.confirmPayment(session.metadata!.ideaId, session.payment_intent as string, session.metadata!.paymentId, 'STRIPE');
         }
 
         return { received: true };
@@ -229,20 +229,21 @@ export class PaymentsService {
                 const orderId = event.resource.supplementary_data?.related_ids?.order_id;
 
                 if (orderId) {
-                    // Find payment by PayPal order ID
                     const payment = await this.paymentModel.findOne({ paypalOrderId: orderId });
 
                     if (payment) {
-                        const idea = await this.ideasService.confirmPayment(payment.ideaId.toString(), event.resource.id);
+                        await this.confirmPayment(
+                            payment.ideaId.toString(),
+                            event.resource.id,
+                            payment._id!.toString(),
+                            'PAYPAL'
+                        );
 
-                        // Update payment record to PAID
                         await this.paymentModel.findByIdAndUpdate(
                             payment._id,
                             {
                                 $set: {
-                                    paypalTransactionId: event.resource.id,
-                                    status: PaymentStatus.PAID,
-                                    paidAt: new Date()
+                                    paypalTransactionId: event.resource.id
                                 }
                             }
                         );
@@ -257,23 +258,26 @@ export class PaymentsService {
         }
     }
 
-    private async confirmPayment(ideaId: string, paymentIntentId: string, paymentId: string) {
+    private async confirmPayment(ideaId: string, paymentIntentId: string, paymentId: string, paymentMethod: string = 'STRIPE') {
         try {
-            const idea = await this.ideasService.confirmPayment(ideaId, paymentIntentId);
+            const idea = await this.ideasService.confirmPayment(ideaId, paymentIntentId, paymentMethod);
 
-            // Update payment record to PAID
+            const updateData: any = {
+                status: PaymentStatus.PAID,
+                paidAt: new Date()
+            };
+
+            if (paymentMethod === 'PAYPAL') {
+                updateData.paypalTransactionId = paymentIntentId;
+            } else {
+                updateData.paymentIntentId = paymentIntentId;
+            }
+
             await this.paymentModel.findByIdAndUpdate(
                 new Types.ObjectId(paymentId),
-                {
-                    $set: {
-                        paymentIntentId,
-                        status: PaymentStatus.PAID,
-                        paidAt: new Date()
-                    }
-                }
+                { $set: updateData }
             );
         } catch (error) {
-            // Log error and rethrow for proper handling
             console.error(`Failed to confirm payment for idea ${ideaId}:`, error);
             throw new BadRequestException('Payment confirmation failed');
         }

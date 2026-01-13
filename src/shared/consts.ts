@@ -5,7 +5,7 @@ export const constantsAppSettings = {
     stripeCancelUrl: '',
     paypalClientId: '',
     paypalClientSecret: '',
-    paypalEnvironment: 'sandbox',
+    paypalEnvironment: '',
     paypalSuccessUrl: '',
     paypalCancelUrl: '',
     applePayMerchantId: '',
