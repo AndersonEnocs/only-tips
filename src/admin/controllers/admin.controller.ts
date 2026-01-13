@@ -2,6 +2,7 @@ import { Controller, Get, Put, Body, Param, Query, UsePipes, ValidationPipe, Use
 import { AdminService } from '../services/admin.service';
 import { AdminDecisionDto } from '../../ideas/dtos/admin-decision.dto';
 import { UpdateFundDto } from '../../ideas/dtos/update-fund.dto';
+import { AdminStatisticsDto } from '../dtos/admin-statistics.dto';
 import { ApiResponseDto } from '../../shared/dtos/api-response.dto';
 import { IdeaMapper } from '../../ideas/utilities/idea.mapper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -40,6 +41,16 @@ export class AdminController {
             statusCode: 1000,
             message: 'Decision recorded successfully.',
             data: IdeaMapper.schemaToResponseDto(updated as any)
+        };
+    }
+
+    @Get('statistics')
+    async getStatistics(): Promise<ApiResponseDto<AdminStatisticsDto>> {
+        const statistics = await this.adminService.getStatistics();
+        return {
+            statusCode: 1000,
+            message: 'Admin statistics retrieved successfully.',
+            data: statistics
         };
     }
 

@@ -5,6 +5,7 @@ import { Idea, IdeaDocument } from '../../ideas/schemas/idea.schema';
 import { QueryAdmin } from '../../ideas/queries/query-admin';
 import { DefaultSettingsService } from '../../default-settings/services/default-settings.service';
 import { SETTING_FUND_TOTAL, constantsAppSettings } from '../../shared/consts';
+import { AdminStatisticsDto } from '../dtos/admin-statistics.dto';
 
 @Injectable()
 export class AdminService {
@@ -37,5 +38,23 @@ export class AdminService {
         await this.settingsService.upsertSetting({ attribute: SETTING_FUND_TOTAL, value: amount.toString() });
         constantsAppSettings.fundTotal = amount;
         return { newTotal: amount };
+    }
+
+    async getStatistics(): Promise<AdminStatisticsDto> {
+        const result = await this.ideaModel.aggregate(QueryAdmin.getStatistics());
+
+        // If no results, return zeros for all counts
+        if (!result || result.length === 0) {
+            return {
+                totalIdeas: 0,
+                pendingPayment: 0,
+                received: 0,
+                reviewed: 0,
+                selected: 0,
+                notSelected: 0
+            };
+        }
+
+        return result[0];
     }
 }
