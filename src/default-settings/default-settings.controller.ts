@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { DefaultSettingsService } from './services/default-settings.service';
 import { AppSettings } from './schemas/app-settings.schema';
 
@@ -14,5 +14,11 @@ export class DefaultSettingsController {
     @Post('upsert')
     async upsertSetting(@Body() setting: Partial<AppSettings>) {
         return this.defaultSettingsService.upsertSetting(setting);
+    }
+
+    @Get('fund-total')
+    async getFundTotal() {
+        const value = await this.defaultSettingsService.getFundTotal();
+        return { fund: value ? parseFloat(value) : 0 };
     }
 }

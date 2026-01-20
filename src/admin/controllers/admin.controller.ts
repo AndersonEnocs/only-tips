@@ -64,4 +64,6 @@ export class AdminController {
             data: result
         };
     }
+
+    
 }

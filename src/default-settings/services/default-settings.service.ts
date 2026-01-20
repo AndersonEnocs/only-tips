@@ -24,4 +24,9 @@ export class DefaultSettingsService {
             { upsert: true, new: true }
         )
     }
+
+    async getFundTotal(): Promise<string | null> {
+        const setting = await this.appSettingsModel.findOne({ attribute: 'fund_total' });
+        return setting ? setting.value : null;
+    }
 }
