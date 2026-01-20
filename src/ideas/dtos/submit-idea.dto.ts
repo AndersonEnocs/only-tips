@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, IsBoolean, IsOptional, MaxLength, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsBoolean, IsOptional, MaxLength, IsEnum, IsNumber, IsPositive } from 'class-validator';
 import { PaymentMethod } from '../../payments/schemas/payment.schema';
 
 export class SubmitIdeaDto {
@@ -23,4 +23,24 @@ export class SubmitIdeaDto {
     @IsEnum(PaymentMethod)
     @IsNotEmpty()
     paymentMethod: PaymentMethod;
+
+    @IsString()
+    @IsNotEmpty()
+    firstName: string;
+
+    @IsString()
+    @IsNotEmpty()
+    lastName: string;
+
+    @IsString()
+    @IsNotEmpty()
+    phoneNumber: string;
+
+    @IsString()
+    @IsNotEmpty()
+    address: string;
+
+    @IsNumber()
+    @IsPositive()
+    fundingGoal: number;
 }

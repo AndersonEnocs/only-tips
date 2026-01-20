@@ -41,6 +41,21 @@ export class Idea {
 
     @Prop({ default: true })
     is_public: boolean;
+
+    @Prop({ required: true, trim: true })
+    first_name: string;
+
+    @Prop({ required: true, trim: true })
+    last_name: string;
+
+    @Prop({ required: true, trim: true })
+    phone_number: string;
+
+    @Prop({ required: true, trim: true })
+    address: string;
+
+    @Prop({ required: true, type: Number })
+    funding_goal: number;
 }
 
 export const IdeaSchema = SchemaFactory.createForClass(Idea);
